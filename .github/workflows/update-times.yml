@@ -33,10 +33,10 @@ jobs:
           const fs = require("fs");
 
           const BOARD = "https://beit-knesset-board.mendimish.workers.dev/";
-          // The board prints Russian names; the TV screen shows Hebrew.
-          const HE = { "Шахарит": "שחרית", "Минха": "מנחה", "Маарив": "מעריב" };
+          // The screen shows the same Russian names the board prints, so nothing is
+          // translated here -- the names pass straight through.
           // Fixed display order, independent of the order the board happens to render.
-          const ORDER = ["שחרית", "מנחה", "מעריב"];
+          const ORDER = ["Шахарит", "Минха", "Маарив"];
 
           async function main() {
             const res = await fetch(BOARD, { headers: { "cache-control": "no-cache" } });
@@ -47,7 +47,7 @@ jobs:
             for (const card of html.split("prayer-card ").slice(1)) {
               const ru = (card.match(/>(Шахарит|Минха|Маарив)[^<]*</) || [])[1];
               const time = (card.match(/>(([01][0-9]|2[0-3]):[0-5][0-9])</) || [])[1];
-              if (ru && time && HE[ru]) found[HE[ru]] = time;
+              if (ru && time) found[ru] = time;
             }
 
             // Refuse to write a partial result: a screen showing two of three times, or a
