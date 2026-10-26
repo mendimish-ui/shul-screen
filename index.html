@@ -5,232 +5,251 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>מסך בית הכנסת</title>
 <!--
-  Screen 2 - feasibility test page.
+  Screen 2 for the shul's Samsung TV (Tizen 6.0).
 
-  Built to answer one question: does a github.io page open on the shul's Samsung TV
-  (Tizen 6.0) over the public Wi-Fi, with no VPN? Everything here is deliberately plain
-  so that nothing but the hosting can be the reason it fails.
+  WHY THIS PAGE EXISTS, and why it is not the main board:
+  The board itself uses CSS subgrid (Chrome 117+, Sept 2023) and 87 clamp() calls. The TV's
+  browser is built on Chrome from around 2020 and Samsung never updates it, so the board's
+  markup arrives intact and then fails to lay out -- content scattered, times clipped. Proven
+  on the real TV, 2026-10-27. So this is a separate, deliberately plain page.
 
-  Deliberate constraints:
-   - ES5 only. var, function expressions, XMLHttpRequest. No fetch, no arrow functions,
-     no template literals, no Promise, no const/let.
-   - No external fonts, no CDN, no library. Google Fonts may itself be unreachable from
-     Russia without a VPN, and a page that half-loads would muddy the test.
-   - No private data of any kind. This repository is public.
+  HARD CONSTRAINTS, all verified on that TV:
+   - ES5 only: var, function, XMLHttpRequest. No fetch, arrow functions, template literals,
+     const/let, Promise.
+   - No CSS beyond ~2015: no grid, no clamp, no custom properties, no aspect-ratio. Plain
+     block and absolute positioning, sizes in vw/vh, which that browser does handle.
+   - No external fonts or libraries. Google Fonts may be unreachable without a VPN, and a
+     half-loaded page would muddy every future diagnosis.
 
-  Palette taken from the existing board (website/src/app/globals.css) so the two screens
-  read as one system: parchment ground, ink-brown text, gold accents, deep navy header.
+  WHERE THE VIDEOS COME FROM:
+  bronnaya.com, which is the board's own Cloudflare Worker and R2 bucket -- confirmed
+  reachable from the TV without a VPN. R2 charges nothing for egress, so a video looping
+  24/7 costs nothing, whereas GitHub Pages caps at 100GB/month and forbids video hosting
+  outright. The page is on GitHub (free, simple); only the heavy files come from R2.
+
+  Palette taken from the board (website/src/app/globals.css) so the two screens look related.
 -->
 <style>
-  html, body {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-    overflow: hidden;
-  }
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #0f1b33; }
   body {
-    background: #f2e6c9;
-    /* The board's own parchment: a gold glow at the top over a cream gradient. */
-    background-image:
-      radial-gradient(circle at 50% 0%, rgba(191,148,60,0.14), rgba(191,148,60,0) 60%),
-      linear-gradient(180deg, #faf3e2 0%, #f2e6c9 100%);
-    color: #3a2c14;
+    color: #fdf6e6;
     font-family: "Noto Serif Hebrew", "David", Georgia, "Times New Roman", serif;
-    -webkit-font-smoothing: antialiased;
   }
 
-  /* Deep navy header, same as the board's top bar. */
-  .bar {
+  /* Header: name on the right, clock on the left. Plain block layout -- no flex gap, no grid. */
+  #bar {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 11vh;
     background: #0f1b33;
-    color: #fdf6e6;
-    padding: 1.6vh 2.4vw;
-    display: -webkit-box;
-    display: flex;
-    -webkit-box-align: center;
-    align-items: center;
-    -webkit-box-pack: justify;
-    justify-content: space-between;
+    border-bottom: 1px solid rgba(201,153,47,0.45);
   }
-  .bar-name { font-size: 3.4vh; font-weight: bold; letter-spacing: 0.01em; }
-  .bar-clock {
+  #barname {
+    position: absolute;
+    right: 2.5vw; top: 2.2vh;
     font-size: 4.4vh;
     font-weight: bold;
-    letter-spacing: 0.02em;
-    /* Digits must not jiggle as the seconds tick on a screen nobody touches. */
-    font-variant-numeric: tabular-nums;
   }
-  .bar-date { font-size: 2.4vh; opacity: 0.75; }
-
-  .wrap {
-    height: 78vh;
-    padding: 3vh 3vw;
-    box-sizing: border-box;
-    display: -webkit-box;
-    display: flex;
-    -webkit-box-orient: vertical;
-    -webkit-box-direction: normal;
-    flex-direction: column;
-    -webkit-box-pack: center;
-    justify-content: center;
-  }
-
-  /* One cube, matching the board's panels. */
-  .card {
-    background: -webkit-linear-gradient(top, rgba(255,252,244,0.75), rgba(255,250,235,0.55));
-    background: linear-gradient(180deg, rgba(255,252,244,0.75), rgba(255,250,235,0.55));
-    border: 1px solid rgba(154,111,31,0.35);
-    border-radius: 22px;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 10px 24px rgba(122,86,19,0.12);
-    padding: 5vh 4vw;
-    text-align: center;
-  }
-  .title {
-    font-size: 8vh;
-    line-height: 1.12;
-    margin: 0 0 3vh 0;
+  #clock {
+    position: absolute;
+    left: 2.5vw; top: 1.4vh;
+    font-size: 6vh;
     font-weight: bold;
-    color: #7a5613;
+    letter-spacing: 0.02em;
+    color: #e6c169;
   }
-  .body {
-    font-size: 4.6vh;
-    line-height: 1.5;
-    margin: 0;
-    color: #3a2c14;
-  }
-  .note {
-    margin-top: 4vh;
-    font-size: 2.6vh;
-    color: #8a7245;
+  #datum {
+    position: absolute;
+    left: 2.5vw; top: 8vh;
+    font-size: 2.3vh;
+    color: #c9a95f;
   }
 
-  /* Shown only when the page cannot reach its content file. The last good content stays
-     on screen underneath; this is a quiet mark, not a takeover - the same principle the
-     main board uses. */
-  .offline {
-    position: fixed;
-    top: 1vh;
-    left: 1.4vw;
+  /* Video fills everything under the header. */
+  #stage {
+    position: absolute;
+    top: 11vh; left: 0; right: 0; bottom: 0;
+    background: #000;
+  }
+  video {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Caption strip over the bottom of the video, only when there is a caption. */
+  #cap {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    padding: 2vh 3vw;
+    background: #0f1b33;
+    font-size: 3.4vh;
+    text-align: center;
+    display: none;
+  }
+
+  /* Shown only when a video cannot be fetched. Deliberately quiet. */
+  #msg {
+    position: absolute;
+    left: 0; right: 0; top: 40%;
+    text-align: center;
+    font-size: 4vh;
+    color: #c9a95f;
+    display: none;
+  }
+  #mark {
+    position: absolute;
+    top: 1.2vh; left: 1.5vw;
     font-size: 2vh;
     color: #fdf6e6;
-    opacity: 0.55;
+    opacity: 0.5;
     display: none;
   }
 </style>
 </head>
 <body>
 
-<div class="bar">
-  <div class="bar-name">בית הכנסת</div>
-  <div>
-    <div class="bar-clock" id="clock">--:--:--</div>
-    <div class="bar-date" id="date"></div>
-  </div>
+<div id="bar">
+  <div id="barname">בית הכנסת</div>
+  <div id="clock">--:--:--</div>
+  <div id="datum"></div>
 </div>
+<div id="mark">אין חיבור</div>
 
-<div class="offline" id="offline">אין חיבור</div>
-
-<div class="wrap">
-  <div class="card">
-    <h1 class="title" id="title">טוען…</h1>
-    <p class="body" id="body"></p>
-    <div class="note" id="note"></div>
-  </div>
+<div id="stage">
+  <video id="vid" muted playsinline autoplay preload="auto"></video>
+  <div id="msg">הסרטון נטען…</div>
+  <div id="cap"></div>
 </div>
 
 <script>
-/* ES5 only - see the comment at the top of this file. */
+/* ES5 only -- see the note at the top of this file. */
 (function () {
   "use strict";
 
-  var CONTENT_URL = "content.json";
-  var REFRESH_MS = 30000;
-  var STORE_KEY = "screen2-last-content";
+  /* The board's own origin. Videos are served from here, not from GitHub: R2 has no egress
+     charge, while GitHub Pages caps at 100GB/month. Confirmed reachable from the TV. */
+  var MEDIA = "https://bronnaya.com";
 
-  var titleEl = document.getElementById("title");
-  var bodyEl = document.getElementById("body");
-  var noteEl = document.getElementById("note");
+  var PLAYLIST_URL = "playlist.json";
+  var PLAYLIST_REFRESH_MS = 120000;
+
+  var vid = document.getElementById("vid");
+  var msg = document.getElementById("msg");
+  var cap = document.getElementById("cap");
+  var mark = document.getElementById("mark");
   var clockEl = document.getElementById("clock");
-  var dateEl = document.getElementById("date");
-  var offlineEl = document.getElementById("offline");
+  var datumEl = document.getElementById("datum");
 
+  var items = [];
+  var at = 0;
   var failures = 0;
 
   function pad(n) { return (n < 10 ? "0" : "") + n; }
 
-  /* The clock runs off the TV's own clock and never depends on the network, so the screen
-     stays obviously alive even through a long outage. */
-  function tickClock() {
-    var now = new Date();
-    clockEl.innerHTML = pad(now.getHours()) + ":" + pad(now.getMinutes()) + ":" + pad(now.getSeconds());
+  /* Runs off the TV's own clock, so the screen stays visibly alive through any outage. */
+  function tick() {
+    var d = new Date();
+    clockEl.innerHTML = pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
     var days = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
-    dateEl.innerHTML = "יום " + days[now.getDay()] + " · " +
-      pad(now.getDate()) + "." + pad(now.getMonth() + 1) + "." + now.getFullYear();
+    datumEl.innerHTML = "יום " + days[d.getDay()] + " · " +
+      pad(d.getDate()) + "." + pad(d.getMonth() + 1) + "." + d.getFullYear();
   }
 
-  function render(data) {
-    if (!data) { return; }
-    titleEl.innerHTML = "";
-    bodyEl.innerHTML = "";
-    noteEl.innerHTML = "";
-    /* textContent, never innerHTML, for anything that came from the content file: it keeps
-       markup in the file from becoming markup on the screen. */
-    titleEl.appendChild(document.createTextNode(data.title || ""));
-    bodyEl.appendChild(document.createTextNode(data.body || ""));
-    noteEl.appendChild(document.createTextNode(data.note || ""));
+  function setText(el, text) {
+    el.innerHTML = "";
+    if (text) { el.appendChild(document.createTextNode(text)); }
   }
 
-  /* Keeps the last good content on the TV itself, so a reboot during an outage still shows
-     something rather than an empty card. */
-  function remember(raw) {
-    try { window.localStorage.setItem(STORE_KEY, raw); } catch (e) {}
-  }
-  function recall() {
-    try {
-      var raw = window.localStorage.getItem(STORE_KEY);
-      return raw ? JSON.parse(raw) : null;
-    } catch (e) { return null; }
+  function show(el, on) { el.style.display = on ? "block" : "none"; }
+
+  function playAt(i) {
+    if (items.length === 0) {
+      setText(msg, "אין סרטונים להצגה");
+      show(msg, true);
+      return;
+    }
+    at = i % items.length;
+    var item = items[at];
+    var url = item.url;
+    /* A relative path means "from the board's origin"; a full URL is used as given, so a
+       video can also be hosted elsewhere later without changing this page. */
+    if (url.indexOf("http") !== 0) { url = MEDIA + url; }
+    show(msg, false);
+    setText(cap, item.caption || "");
+    show(cap, !!item.caption);
+    vid.src = url;
+    try { vid.load(); } catch (e) {}
+    var p = vid.play();
+    if (p && typeof p.catch === "function") { p.catch(function () {}); }
   }
 
-  function load() {
+  function next() { playAt(at + 1); }
+
+  vid.addEventListener("ended", next);
+  /* A video that cannot load must not stop the rotation -- move on after a moment rather
+     than sitting on a black screen, which is what an unattended wall display must never do. */
+  vid.addEventListener("error", function () {
+    setText(msg, "מדלג…");
+    show(msg, true);
+    setTimeout(next, 3000);
+  });
+  vid.addEventListener("playing", function () { show(msg, false); });
+  /* A clip that stalls mid-play (the link went down) is given 20s, then skipped. */
+  var lastTime = 0;
+  var stalls = 0;
+  setInterval(function () {
+    if (vid.paused || vid.ended) { return; }
+    if (vid.currentTime > lastTime) { lastTime = vid.currentTime; stalls = 0; return; }
+    stalls++;
+    if (stalls >= 20) { stalls = 0; next(); }
+  }, 1000);
+
+  function loadPlaylist() {
     var xhr = new XMLHttpRequest();
-    /* The timestamp defeats the TV browser's cache, which is aggressive and has no other
-       way to be told the file changed. */
-    xhr.open("GET", CONTENT_URL + "?t=" + (new Date()).getTime(), true);
-    /* A request that hangs is the failure mode that matters on this network - without a
-       timeout it would never resolve and the page would never know it was offline. */
+    xhr.open("GET", PLAYLIST_URL + "?t=" + (new Date()).getTime(), true);
     xhr.timeout = 15000;
     xhr.onreadystatechange = function () {
       if (xhr.readyState !== 4) { return; }
+      var data = null;
       if (xhr.status >= 200 && xhr.status < 300) {
-        var data = null;
         try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
-        if (data) {
-          failures = 0;
-          offlineEl.style.display = "none";
-          render(data);
-          remember(xhr.responseText);
-          return;
-        }
       }
-      markFailure();
+      if (data && data.items && data.items.length) {
+        failures = 0;
+        show(mark, false);
+        var wasEmpty = items.length === 0;
+        /* Replaced wholesale, so removing an item from the file removes it from the screen. */
+        items = data.items;
+        try { localStorage.setItem("screen2-playlist", xhr.responseText); } catch (e) {}
+        if (wasEmpty) { playAt(0); }
+        return;
+      }
+      failures++;
+      if (failures >= 2) { show(mark, true); }
     };
-    xhr.onerror = markFailure;
-    xhr.ontimeout = markFailure;
-    try { xhr.send(); } catch (e) { markFailure(); }
+    xhr.onerror = xhr.ontimeout = function () {
+      failures++;
+      if (failures >= 2) { show(mark, true); }
+    };
+    try { xhr.send(); } catch (e) {}
   }
 
-  /* One failure means nothing on a flaky link; two in a row is worth showing. The content
-     already on screen is never cleared. */
-  function markFailure() {
-    failures = failures + 1;
-    if (failures >= 2) { offlineEl.style.display = "block"; }
-  }
+  /* Last known playlist, so a reboot during an outage still has something to play. */
+  try {
+    var saved = localStorage.getItem("screen2-playlist");
+    if (saved) {
+      var d = JSON.parse(saved);
+      if (d && d.items) { items = d.items; }
+    }
+  } catch (e) {}
 
-  render(recall());
-  tickClock();
-  setInterval(tickClock, 1000);
-  load();
-  setInterval(load, REFRESH_MS);
+  tick();
+  setInterval(tick, 1000);
+  if (items.length) { playAt(0); } else { setText(msg, "טוען…"); show(msg, true); }
+  loadPlaylist();
+  setInterval(loadPlaylist, PLAYLIST_REFRESH_MS);
 })();
 </script>
 
