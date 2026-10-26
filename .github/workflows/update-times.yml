@@ -1,0 +1,86 @@
+# Keeps the prayer times on the TV screen current, without anyone touching anything.
+#
+# WHY THIS EXISTS: the page lives on GitHub Pages and the board lives on bronnaya.com. The
+# TV's browser refuses to let a page on one site read data from another (proven on the real
+# TV, 2026-10-27: a video from bronnaya.com stayed black while the same video served from
+# GitHub played fine). So the page cannot fetch the times itself.
+#
+# This runs on GitHub's own servers instead, where that restriction does not apply. It reads
+# the board, pulls the three times out of it, and writes them into playlist.json. The TV
+# re-reads that file every two minutes on its own, so the screen follows along with no
+# refresh and no visit.
+name: Update prayer times
+
+on:
+  schedule:
+    # 02:10 UTC = 05:10 Moscow -- before Shacharit, after the board has rolled over to the
+    # new day, and at an odd minute because GitHub delays jobs scheduled on the hour.
+    - cron: "10 2 * * *"
+  workflow_dispatch:      # so you can also run it by hand from the Actions tab
+
+permissions:
+  contents: write         # needed to commit the updated file back
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the board and update playlist.json
+        run: |
+          node <<'SCRIPT'
+          const fs = require("fs");
+
+          const BOARD = "https://beit-knesset-board.mendimish.workers.dev/";
+          // The board prints Russian names; the TV screen shows Hebrew.
+          const HE = { "Шахарит": "שחרית", "Минха": "מנחה", "Маарив": "מעריב" };
+          // Fixed display order, independent of the order the board happens to render.
+          const ORDER = ["שחרית", "מנחה", "מעריב"];
+
+          async function main() {
+            const res = await fetch(BOARD, { headers: { "cache-control": "no-cache" } });
+            if (!res.ok) throw new Error("board returned " + res.status);
+            const html = await res.text();
+
+            const found = {};
+            for (const card of html.split("prayer-card ").slice(1)) {
+              const ru = (card.match(/>(Шахарит|Минха|Маарив)[^<]*</) || [])[1];
+              const time = (card.match(/>(([01][0-9]|2[0-3]):[0-5][0-9])</) || [])[1];
+              if (ru && time && HE[ru]) found[HE[ru]] = time;
+            }
+
+            // Refuse to write a partial result: a screen showing two of three times, or a
+            // stale one next to a fresh one, is worse than leaving yesterday's file alone.
+            const times = ORDER.filter((n) => found[n]).map((n) => ({ name: n, time: found[n] }));
+            if (times.length !== ORDER.length) {
+              console.log("Only found " + times.length + " of 3 times — leaving the file unchanged.");
+              return;
+            }
+
+            const file = "playlist.json";
+            const data = JSON.parse(fs.readFileSync(file, "utf8"));
+            const before = JSON.stringify(data.times || []);
+            data.times = times;
+            if (JSON.stringify(data.times) === before) {
+              console.log("Times unchanged: " + before);
+              return;
+            }
+            fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n", "utf8");
+            console.log("Updated to: " + JSON.stringify(times));
+          }
+
+          main().catch((e) => { console.error(e.message); process.exit(1); });
+          SCRIPT
+
+      - name: Commit if anything changed
+        run: |
+          if git diff --quiet playlist.json; then
+            echo "Nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add playlist.json
+          git commit -m "Update prayer times from the board"
+          git push
