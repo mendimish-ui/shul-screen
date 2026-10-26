@@ -34,7 +34,12 @@
   body {
     color: #fdf6e6;
     font-family: "Noto Serif Hebrew", "David", Georgia, "Times New Roman", serif;
+    /* The TV's pointer is large and stays wherever the remote last left it. On a wall display
+       nobody points at, it is just a blemish. Declared on every element, not only body, because
+       a child with its own cursor rule would otherwise bring it back. */
+    cursor: none;
   }
+  * { cursor: none !important; }
 
   /* Header: name on the right, clock on the left. Plain block layout -- no flex gap, no grid. */
   #bar {
@@ -44,12 +49,6 @@
     background: #0f1b33;
     border-bottom: 1px solid rgba(201,153,47,0.45);
   }
-  #barname {
-    position: absolute;
-    right: 2.5vw; top: 2.2vh;
-    font-size: 4.4vh;
-    font-weight: bold;
-  }
   #clock {
     position: absolute;
     left: 2.5vw; top: 1.4vh;
@@ -57,6 +56,30 @@
     font-weight: bold;
     letter-spacing: 0.02em;
     color: #e6c169;
+  }
+  /* Prayer times, centred in the header. Filled from playlist.json so they are edited in
+     the same one file as everything else -- the page cannot read them from the board itself,
+     because this TV's browser refuses cross-site requests (proven by the video test). */
+  #times {
+    position: absolute;
+    left: 24vw; right: 6vw; top: 1.6vh;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .t {
+    display: inline-block;
+    margin: 0 1.6vw;
+  }
+  .tn {
+    display: block;
+    font-size: 2.1vh;
+    color: #c9a95f;
+  }
+  .tv2 {
+    display: block;
+    font-size: 4.2vh;
+    font-weight: bold;
+    color: #fdf6e6;
   }
   #datum {
     position: absolute;
@@ -111,9 +134,9 @@
 <body>
 
 <div id="bar">
-  <div id="barname">בית הכנסת</div>
   <div id="clock">--:--:--</div>
   <div id="datum"></div>
+  <div id="times"></div>
 </div>
 <div id="mark">אין חיבור</div>
 
@@ -175,7 +198,12 @@
     var url = item.url;
     /* A relative path means "from the board's origin"; a full URL is used as given, so a
        video can also be hosted elsewhere later without changing this page. */
-    if (url.indexOf("http") !== 0) { url = MEDIA + url; }
+    if (url.indexOf("http") === 0) {
+      /* full url, use as given */
+    } else if (url.charAt(0) === "/") {
+      url = MEDIA + url;   /* a path from the board's own origin */
+    }
+    /* anything else is a file sitting next to this page, used as-is */
     show(msg, false);
     setText(cap, item.caption || "");
     show(cap, !!item.caption);
@@ -206,6 +234,27 @@
     if (stalls >= 20) { stalls = 0; next(); }
   }, 1000);
 
+  /* times is an array of { name, time } from playlist.json; absent or empty hides the strip
+     entirely, so a playlist without it looks exactly as before. */
+  function renderTimes(times) {
+    var box = document.getElementById("times");
+    box.innerHTML = "";
+    if (!times || !times.length) { return; }
+    for (var i = 0; i < times.length; i++) {
+      var w = document.createElement("div");
+      w.className = "t";
+      var n = document.createElement("span");
+      n.className = "tn";
+      n.appendChild(document.createTextNode(times[i].name || ""));
+      var v = document.createElement("span");
+      v.className = "tv2";
+      v.appendChild(document.createTextNode(times[i].time || ""));
+      w.appendChild(n);
+      w.appendChild(v);
+      box.appendChild(w);
+    }
+  }
+
   function loadPlaylist() {
     var xhr = new XMLHttpRequest();
     xhr.open("GET", PLAYLIST_URL + "?t=" + (new Date()).getTime(), true);
@@ -222,6 +271,7 @@
         var wasEmpty = items.length === 0;
         /* Replaced wholesale, so removing an item from the file removes it from the screen. */
         items = data.items;
+        renderTimes(data.times);
         try { localStorage.setItem("screen2-playlist", xhr.responseText); } catch (e) {}
         if (wasEmpty) { playAt(0); }
         return;
@@ -242,6 +292,7 @@
     if (saved) {
       var d = JSON.parse(saved);
       if (d && d.items) { items = d.items; }
+      if (d && d.times) { renderTimes(d.times); }
     }
   } catch (e) {}
 

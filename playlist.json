@@ -1,8 +1,10 @@
 {
+  "times": [
+    { "name": "שחרית", "time": "08:30" },
+    { "name": "מנחה",  "time": "16:35" },
+    { "name": "מעריב", "time": "17:45" }
+  ],
   "items": [
-    { "url": "https://mendimish-ui.github.io/shul-screen/video.mp4", "caption": "בדיקה: סרטון מאותו אתר" },
-    { "url": "/media/c316ef52-17ea-4f42-849b-74bf491498ad.mp4", "caption": "בדיקה: סרטון מהשרת של הלוח" },
-    { "url": "/media/5e28bf1d-0d1f-4215-a713-334e6ae27569.mp4", "caption": "" },
-    { "url": "/media/c68ad208-7e93-4e17-9421-5a893c08af8a.mp4", "caption": "" }
+    { "url": "video.mp4", "caption": "" }
   ]
 }
