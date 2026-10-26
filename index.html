@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>מסך בית הכנסת</title>
+<!--
+  Screen 2 - feasibility test page.
+
+  Built to answer one question: does a github.io page open on the shul's Samsung TV
+  (Tizen 6.0) over the public Wi-Fi, with no VPN? Everything here is deliberately plain
+  so that nothing but the hosting can be the reason it fails.
+
+  Deliberate constraints:
+   - ES5 only. var, function expressions, XMLHttpRequest. No fetch, no arrow functions,
+     no template literals, no Promise, no const/let.
+   - No external fonts, no CDN, no library. Google Fonts may itself be unreachable from
+     Russia without a VPN, and a page that half-loads would muddy the test.
+   - No private data of any kind. This repository is public.
+
+  Palette taken from the existing board (website/src/app/globals.css) so the two screens
+  read as one system: parchment ground, ink-brown text, gold accents, deep navy header.
+-->
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
+  }
+  body {
+    background: #f2e6c9;
+    /* The board's own parchment: a gold glow at the top over a cream gradient. */
+    background-image:
+      radial-gradient(circle at 50% 0%, rgba(191,148,60,0.14), rgba(191,148,60,0) 60%),
+      linear-gradient(180deg, #faf3e2 0%, #f2e6c9 100%);
+    color: #3a2c14;
+    font-family: "Noto Serif Hebrew", "David", Georgia, "Times New Roman", serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Deep navy header, same as the board's top bar. */
+  .bar {
+    background: #0f1b33;
+    color: #fdf6e6;
+    padding: 1.6vh 2.4vw;
+    display: -webkit-box;
+    display: flex;
+    -webkit-box-align: center;
+    align-items: center;
+    -webkit-box-pack: justify;
+    justify-content: space-between;
+  }
+  .bar-name { font-size: 3.4vh; font-weight: bold; letter-spacing: 0.01em; }
+  .bar-clock {
+    font-size: 4.4vh;
+    font-weight: bold;
+    letter-spacing: 0.02em;
+    /* Digits must not jiggle as the seconds tick on a screen nobody touches. */
+    font-variant-numeric: tabular-nums;
+  }
+  .bar-date { font-size: 2.4vh; opacity: 0.75; }
+
+  .wrap {
+    height: 78vh;
+    padding: 3vh 3vw;
+    box-sizing: border-box;
+    display: -webkit-box;
+    display: flex;
+    -webkit-box-orient: vertical;
+    -webkit-box-direction: normal;
+    flex-direction: column;
+    -webkit-box-pack: center;
+    justify-content: center;
+  }
+
+  /* One cube, matching the board's panels. */
+  .card {
+    background: -webkit-linear-gradient(top, rgba(255,252,244,0.75), rgba(255,250,235,0.55));
+    background: linear-gradient(180deg, rgba(255,252,244,0.75), rgba(255,250,235,0.55));
+    border: 1px solid rgba(154,111,31,0.35);
+    border-radius: 22px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 10px 24px rgba(122,86,19,0.12);
+    padding: 5vh 4vw;
+    text-align: center;
+  }
+  .title {
+    font-size: 8vh;
+    line-height: 1.12;
+    margin: 0 0 3vh 0;
+    font-weight: bold;
+    color: #7a5613;
+  }
+  .body {
+    font-size: 4.6vh;
+    line-height: 1.5;
+    margin: 0;
+    color: #3a2c14;
+  }
+  .note {
+    margin-top: 4vh;
+    font-size: 2.6vh;
+    color: #8a7245;
+  }
+
+  /* Shown only when the page cannot reach its content file. The last good content stays
+     on screen underneath; this is a quiet mark, not a takeover - the same principle the
+     main board uses. */
+  .offline {
+    position: fixed;
+    top: 1vh;
+    left: 1.4vw;
+    font-size: 2vh;
+    color: #fdf6e6;
+    opacity: 0.55;
+    display: none;
+  }
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <div class="bar-name">בית הכנסת</div>
+  <div>
+    <div class="bar-clock" id="clock">--:--:--</div>
+    <div class="bar-date" id="date"></div>
+  </div>
+</div>
+
+<div class="offline" id="offline">אין חיבור</div>
+
+<div class="wrap">
+  <div class="card">
+    <h1 class="title" id="title">טוען…</h1>
+    <p class="body" id="body"></p>
+    <div class="note" id="note"></div>
+  </div>
+</div>
+
+<script>
+/* ES5 only - see the comment at the top of this file. */
+(function () {
+  "use strict";
+
+  var CONTENT_URL = "content.json";
+  var REFRESH_MS = 30000;
+  var STORE_KEY = "screen2-last-content";
+
+  var titleEl = document.getElementById("title");
+  var bodyEl = document.getElementById("body");
+  var noteEl = document.getElementById("note");
+  var clockEl = document.getElementById("clock");
+  var dateEl = document.getElementById("date");
+  var offlineEl = document.getElementById("offline");
+
+  var failures = 0;
+
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+
+  /* The clock runs off the TV's own clock and never depends on the network, so the screen
+     stays obviously alive even through a long outage. */
+  function tickClock() {
+    var now = new Date();
+    clockEl.innerHTML = pad(now.getHours()) + ":" + pad(now.getMinutes()) + ":" + pad(now.getSeconds());
+    var days = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+    dateEl.innerHTML = "יום " + days[now.getDay()] + " · " +
+      pad(now.getDate()) + "." + pad(now.getMonth() + 1) + "." + now.getFullYear();
+  }
+
+  function render(data) {
+    if (!data) { return; }
+    titleEl.innerHTML = "";
+    bodyEl.innerHTML = "";
+    noteEl.innerHTML = "";
+    /* textContent, never innerHTML, for anything that came from the content file: it keeps
+       markup in the file from becoming markup on the screen. */
+    titleEl.appendChild(document.createTextNode(data.title || ""));
+    bodyEl.appendChild(document.createTextNode(data.body || ""));
+    noteEl.appendChild(document.createTextNode(data.note || ""));
+  }
+
+  /* Keeps the last good content on the TV itself, so a reboot during an outage still shows
+     something rather than an empty card. */
+  function remember(raw) {
+    try { window.localStorage.setItem(STORE_KEY, raw); } catch (e) {}
+  }
+  function recall() {
+    try {
+      var raw = window.localStorage.getItem(STORE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+  }
+
+  function load() {
+    var xhr = new XMLHttpRequest();
+    /* The timestamp defeats the TV browser's cache, which is aggressive and has no other
+       way to be told the file changed. */
+    xhr.open("GET", CONTENT_URL + "?t=" + (new Date()).getTime(), true);
+    /* A request that hangs is the failure mode that matters on this network - without a
+       timeout it would never resolve and the page would never know it was offline. */
+    xhr.timeout = 15000;
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState !== 4) { return; }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        var data = null;
+        try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
+        if (data) {
+          failures = 0;
+          offlineEl.style.display = "none";
+          render(data);
+          remember(xhr.responseText);
+          return;
+        }
+      }
+      markFailure();
+    };
+    xhr.onerror = markFailure;
+    xhr.ontimeout = markFailure;
+    try { xhr.send(); } catch (e) { markFailure(); }
+  }
+
+  /* One failure means nothing on a flaky link; two in a row is worth showing. The content
+     already on screen is never cleared. */
+  function markFailure() {
+    failures = failures + 1;
+    if (failures >= 2) { offlineEl.style.display = "block"; }
+  }
+
+  render(recall());
+  tickClock();
+  setInterval(tickClock, 1000);
+  load();
+  setInterval(load, REFRESH_MS);
+})();
+</script>
+
+</body>
+</html>
